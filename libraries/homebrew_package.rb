@@ -43,7 +43,7 @@ class Chef
         end
 
         def current_installed_version
-          get_version_from_command("brew list --versions | awk '/^#{@new_resource.package_name} / { print $2 }'")
+          get_version_from_command("brew info #{@new_resource.package_name} | awk '/\*$/ { print $1 }' | sed 's/.*\///'")
         end
 
         def candidate_version
