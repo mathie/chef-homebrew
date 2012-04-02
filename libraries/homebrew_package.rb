@@ -11,13 +11,27 @@ class Chef
         def load_current_resource
           @current_resource = Chef::Resource::Package.new(@new_resource.name)
           @current_resource.package_name(@new_resource.package_name)
-          @current_resource.version(current_installed_version)
+          @current_resource.version(current_linked_version)
 
           @current_resource
         end
 
         def install_package(name, version)
-          brew('install', name)
+          unless @current_resource.version == version
+            # If git is not installed, homebrew can't look up other
+            # versions. If a node requires a specific version of git,
+            # the latest version of git is installed then used to look
+            # up older versions of git due to this limitation of
+            # homebrew.
+            install_package(name, :latest) if name == 'git' and @current_resource.version.nil?
+
+            checkout_formula_for(name, version)
+
+            brew('unlink', name) unless installed_versions.empty?
+
+            action = installed_versions.include?(version) ? 'link' : 'install'
+            brew(action, name)
+          end
         end
 
         # Homebrew doesn't really have a notion of upgrading packages, just
@@ -36,14 +50,45 @@ class Chef
         end
 
         protected
+
         def brew(*args)
           run_command_with_systems_locale(
             :command => "brew #{args.join(' ')}"
           )
         end
 
-        def current_installed_version
-          get_version_from_command("brew list --versions | awk '/^#{@new_resource.package_name} / { print $2 }'")
+        def checkout_formula_for name, version
+          command = if version == :latest
+                      "git checkout HEAD /usr/local/Library/Formula/#{name}.rb"
+                    else
+                      match = get_response_from_command("brew versions #{name}").match(/^#{version}\s+(git.+)$/)
+                      if match
+                        match[1]
+                      else
+                        raise Chef::Exceptions::Package, "Homebrew doesn't know anything about version #{version} of #{name}"
+                      end
+                    end
+
+          # Dir for the git repo
+          directory = ::File.dirname(command.split(/\s/).last)
+
+          run_command_with_systems_locale(
+            :command => command,
+            :cwd => directory
+          )
+        end
+
+        def installed_versions
+          # 2..-1 excludes ['.', '..']
+          Dir.entries("/usr/local/Cellar/#{@new_resource.package_name}")[2..-1]
+        rescue Errno::ENOENT
+          []
+        end
+
+        def current_linked_version
+          ::File.readlink("/usr/local/Library/LinkedKegs/#{@new_resource.package_name}").split(/\//).last
+        rescue Errno::ENOENT
+          nil
         end
 
         def candidate_version
