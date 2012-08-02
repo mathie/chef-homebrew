@@ -20,10 +20,8 @@ class Chef
           brew('install', name)
         end
 
-        # Homebrew doesn't really have a notion of upgrading packages, just
-        # install the latest version?
         def upgrade_package(name, version)
-          install_package(name, version)
+          brew('upgrade', name)
         end
 
         def remove_package(name, version)
@@ -37,9 +35,7 @@ class Chef
 
         protected
         def brew(*args)
-          run_command_with_systems_locale(
-            :command => "brew #{args.join(' ')}"
-          )
+          get_response_from_command("brew #{args.join(' ')}")
         end
 
         def current_installed_version
