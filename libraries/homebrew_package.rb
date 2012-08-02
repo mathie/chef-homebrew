@@ -76,4 +76,7 @@ class Chef
   end
 end
 
-Chef::Platform.set :platform => :mac_os_x, :resource => :package, :provider => Chef::Provider::Package::Homebrew
+[:mac_os_x, :mac_os_x_server].each do |platform|
+  Chef::Platform.set  :platform => platform, :resource => :package,
+                      :provider => Chef::Provider::Package::Homebrew
+end
